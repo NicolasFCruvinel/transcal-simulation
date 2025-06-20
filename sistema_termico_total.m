@@ -1,155 +1,121 @@
-% === sistema_termico_total_corrigido.m ===
-function dYdt = sistema_termico_total(t, Y)
+function dYdt = sistema_termico_total_corrigido(t, Y)
+    % --- sistema_termico_total_corrigido.m (v3 - Radiação Solar) ---
+    % Versão final que inclui o ganho de calor por radiação solar incidente.
+
     p = parametros();
 
-    % Estados térmicos (todos em Kelvin)
-    Tmotor = Y(1);
-    Tar_motor = Y(2);
-    Tsensor_motor = Y(5);
-    Tar_res = Y(6);
-    Tsensor_res = Y(7);
-    Tgerador = Y(8);
-    Tbateria = Y(9);
+    % Desempacota o vetor de estados Y (temperaturas em Kelvin)
+    Tmotor              = Y(1);
+    Tar_motor           = Y(2);
+    Tsensor_motor       = Y(5);
+    Tar_res             = Y(6);
+    Tsensor_res         = Y(7);
+    Tgerador            = Y(8);
+    Tbateria            = Y(9);
     Tparede_leste_motor = Y(10);
     Tparede_oeste_motor = Y(11);
-    Tparede_sul_motor = Y(12);
-    Tparede_teto_motor = Y(13);
-    Tparede_motor_int = Y(14);
-    Tparede_res_ext = Y(15);
+    Tparede_sul_motor   = Y(12);
+    Tparede_teto_motor  = Y(13);
+    Tparede_motor_int   = Y(14);
+    Tparede_res_ext     = Y(15);
 
-    % Ambiente
+    % Condições do Ambiente
     Tamb = T_amb(t);
-    T_cel = 0 + 273.15;  % Temperatura do céu em Kelvin
+    Tceu = 0 + 273.15;
 
-    % Cálculo dos coeficientes convectivos
-    h_motor = calc_h_convec(p.D_motor, 3);       % Convecção forçada interna
-    h_ext = calc_h_convec(2.5, 0.5);             % Convecção natural externa
-    h_gerador = calc_h_convec(p.D_gerador, 3);
-    h_bateria = calc_h_convec(p.D_bateria, 3);
+    % --- NOVAS FONTES DE CALOR ---
+    % 1. Radiação Solar Incidente
+    G = radiacao_solar(t); % Calcula a irradiância (W/m²) em cada parede
 
-    % Balanço de energia CORRIGIDO - considerando eficiências
-    if p.withVariablePower
-        Pel = power_profile(t);
+    % 2. Geração Interna
+    Pel = 50e3; % Potência elétrica fixa
+    if p.withVariablePower, Pel = power_profile(t); end
+
+    if Pel > 0
+        eta_gerador = 0.9; eta_motor = 0.3;
+        Q_comb = (Pel / eta_gerador) / eta_motor;
+        Q_gen_motor = 0.4 * Q_comb;
+        Q_gen_gerador = (Pel/eta_gerador - Pel);
+        Q_gen_bateria = 0;
     else
-        Pel = 50e3; % 50 kW em W
+        Q_gen_motor = 0; Q_gen_gerador = 0; Q_gen_bateria = 0;
     end
 
-    % Eficiências conforme enunciado
-    eta_gerador = 0.9;    % 90% eficiência do gerador
-    eta_motor = 0.3;      % 30% eficiência do motor
+    % --- COEFICIENTES DE CONVECÇÃO e TROCAS DE CALOR ---
+    h_int = calc_h_convec(p.D_motor, 3, 0);
 
-    % Calor total do combustível (corrigido)
-    Q_comb = (Pel / eta_gerador) / eta_motor;
+    Q_radiador = 1000 * (Tmotor - Tar_motor);
+    Q_conv_motor_ar = h_int * p.A_motor * (Tmotor - Tar_motor);
+    Q_rad_motor_parede_div = p.sigma * p.epsilon * p.A_motor * (Tmotor^4 - Tparede_motor_int^4);
 
-    % Calor que efetivamente aquece o motor (40% conforme enunciado)
-    Q_motor = 0.4 * Q_comb;
+    Q_vent_motor = p.m_dot_ar * p.cp_ar * (Tamb - Tar_motor);
+    Q_vent_res = p.m_dot_ar_res * p.cp_ar_res * (Tamb - Tar_res);
 
-    % Radiador com controle on-off (item 4)
-    if p.withOnOffControl
-        T_set = 90 + 273.15;
-        T_on = T_set + 10;
-        T_off = T_set - 10;
+    Q_conv_ar_parede_div_motor = h_int * p.A_parede_motor * (Tar_motor - Tparede_motor_int);
+    Q_cond_div = (p.A_div / (p.esp_larocha / p.k_larocha)) * (Tparede_motor_int - Tparede_res_ext);
+    Q_conv_parede_div_res_ar = h_int * p.A_parede_res * (Tparede_res_ext - Tar_res);
 
-        persistent isOn;
-        if isempty(isOn), isOn = true; end
+    % Paredes Externas (cálculos de h dinâmico e trocas de calor)
+    h_ext_teto = calc_h_convec(p.A_parede_teto_motor, 0, Tparede_teto_motor - Tamb);
+    Q_conv_in_teto = h_int * p.A_parede_teto_motor * (Tar_motor - Tparede_teto_motor);
+    Q_conv_out_teto = h_ext_teto * p.A_parede_teto_motor * (Tparede_teto_motor - Tamb);
+    Q_rad_out_teto = p.sigma * p.epsilon * p.A_parede_teto_motor * (Tparede_teto_motor^4 - Tceu^4);
 
-        if Tsensor_motor > T_on
-            isOn = true;
-        elseif Tsensor_motor < T_off
-            isOn = false;
-        end
-        UA_rad = 2000 * isOn;
-    elseif p.withFanFail && t >= 12 * 3600
-        UA_rad = 100; % Item 3 - falha da ventoinha
-    else
-        UA_rad = 1000; % Valor padrão
-    end
+    h_ext_leste = calc_h_convec(p.A_parede_leste_motor, 0, Tparede_leste_motor - Tamb);
+    Q_conv_in_leste = h_int * p.A_parede_leste_motor * (Tar_motor - Tparede_leste_motor);
+    Q_conv_out_leste = h_ext_leste * p.A_parede_leste_motor * (Tparede_leste_motor - Tamb);
+    Q_rad_out_leste = p.sigma * p.epsilon * p.A_parede_leste_motor * (Tparede_leste_motor^4 - Tceu^4);
 
-    % ========= TROCAS TÉRMICAS NO MOTOR =========
-    Q_rad = UA_rad * (Tmotor - Tar_motor); % Calor do radiador
+    h_ext_oeste = calc_h_convec(p.A_parede_oeste_motor, 0, Tparede_oeste_motor - Tamb);
+    Q_conv_in_oeste = h_int * p.A_parede_oeste_motor * (Tar_motor - Tparede_oeste_motor);
+    Q_conv_out_oeste = h_ext_oeste * p.A_parede_oeste_motor * (Tparede_oeste_motor - Tamb);
+    Q_rad_out_oeste = p.sigma * p.epsilon * p.A_parede_oeste_motor * (Tparede_oeste_motor^4 - Tceu^4);
 
-    % Convecção do motor com o ar interno
-    Q_conv_motor = h_motor * p.A_motor * (Tmotor - Tar_motor);
+    h_ext_sul = calc_h_convec(p.A_parede_sul_motor, 0, Tparede_sul_motor - Tamb);
+    Q_conv_in_sul = h_int * p.A_parede_sul_motor * (Tar_motor - Tparede_sul_motor);
+    Q_conv_out_sul = h_ext_sul * p.A_parede_sul_motor * (Tparede_sul_motor - Tamb);
+    Q_rad_out_sul = p.sigma * p.epsilon * p.A_parede_sul_motor * (Tparede_sul_motor^4 - Tceu^4);
 
-    % Radiação do motor para as paredes internas
-    Q_rad_motor = p.sigma * p.epsilon * p.A_motor * (Tmotor^4 - Tparede_motor_int^4);
+    Q_solo_motor = p.k_solo * p.S_motor * (Tmotor - p.Tinf);
+    Q_solo_res = p.k_solo * p.S_res * (Tar_res - p.Tinf);
 
-    % Renovação de ar no espaço do motor
-    Q_ar_motor = p.m_dot_ar * p.cp_ar * (Tamb - Tar_motor);
+    Q_conv_gerador_ar = h_int * p.A_gerador * (Tgerador - Tar_motor);
+    Q_conv_bateria_ar = h_int * p.A_bateria * (Tbateria - Tar_motor);
 
-    % Convecção do ar interno com as paredes
-    Q_conv_ar_parede = h_motor * p.A_parede_motor * (Tar_motor - Tparede_motor_int);
+    % --- EQUAÇÕES DIFERENCIAIS (BALANÇO DE ENERGIA COM RADIAÇÃO SOLAR) ---
+    % Formato: dYdt = (1/(m*cp)) * (Q_in - Q_out)
 
-    % Condução através da parede divisória (lã de rocha)
-    Q_cond_larocha = p.k_larocha * p.A_div / p.esp_larocha * (Tparede_motor_int - Tparede_res_ext);
+    dTmotor = (Q_gen_motor - Q_radiador - Q_conv_motor_ar - Q_rad_motor_parede_div - Q_solo_motor) / (p.m_motor * p.cp_motor);
+    dT_ar_motor = (Q_radiador + Q_conv_motor_ar + Q_conv_gerador_ar + Q_conv_bateria_ar + Q_vent_motor ...
+                   - Q_conv_ar_parede_div_motor - Q_conv_in_teto - Q_conv_in_leste - Q_conv_in_oeste - Q_conv_in_sul) / (p.m_ar * p.cp_ar);
 
-    % Convecção no lado do reservatório
-    Q_conv_res_parede = h_motor * p.A_parede_res * (Tar_res - Tparede_res_ext);
+    dT_parede_motor_int = (Q_rad_motor_parede_div + Q_conv_ar_parede_div_motor - Q_cond_div) / (p.m_parede_motor * p.cp_parede_motor);
+    dT_parede_res_ext = (Q_cond_div - Q_conv_parede_div_res_ar) / (p.m_parede_res * p.cp_parede_res);
+    dT_ar_res = (Q_conv_parede_div_res_ar + Q_vent_res - Q_solo_res) / (p.m_ar_res * p.cp_ar_res);
 
-    % Perda para o solo (usando fator de forma)
-    Q_solo_motor = p.k_solo * p.A_base_motor / p.S_motor * (Tmotor - p.Tinf);
-    Q_solo_res = p.k_solo * p.A_base_res / p.S_res * (Tar_res - p.Tinf);
+    % Paredes Externas: Q_solar é adicionado como um ganho de calor
+    Q_solar_teto = p.alpha * p.A_parede_teto_motor * G.teto;
+    dT_parede_teto_motor = (Q_conv_in_teto - Q_conv_out_teto - Q_rad_out_teto + Q_solar_teto) / (p.m_parede_teto_motor * p.cp_parede_teto_motor);
 
-    % ========= PAREDES LATERAIS =========
-    % Convecção interna
-    Q_leste_conv = h_motor * p.A_parede_leste_motor * (Tar_motor - Tparede_leste_motor);
-    Q_oeste_conv = h_motor * p.A_parede_oeste_motor * (Tar_motor - Tparede_oeste_motor);
-    Q_sul_conv = h_motor * p.A_parede_sul_motor * (Tar_motor - Tparede_sul_motor);
-    Q_teto_conv = h_motor * p.A_parede_teto_motor * (Tar_motor - Tparede_teto_motor);
+    Q_solar_leste = p.alpha * p.A_parede_leste_motor * G.leste;
+    dT_parede_leste_motor = (Q_conv_in_leste - Q_conv_out_leste - Q_rad_out_leste + Q_solar_leste) / (p.m_parede_leste_motor * p.cp_parede_leste_motor);
 
-    % Convecção externa
-    Q_leste_ext = h_ext * p.A_parede_leste_motor * (Tparede_leste_motor - Tamb);
-    Q_oeste_ext = h_ext * p.A_parede_oeste_motor * (Tparede_oeste_motor - Tamb);
-    Q_sul_ext = h_ext * p.A_parede_sul_motor * (Tparede_sul_motor - Tamb);
-    Q_teto_ext = h_ext * p.A_parede_teto_motor * (Tparede_teto_motor - Tamb);
+    Q_solar_oeste = p.alpha * p.A_parede_oeste_motor * G.oeste;
+    dT_parede_oeste_motor = (Q_conv_in_oeste - Q_conv_out_oeste - Q_rad_out_oeste + Q_solar_oeste) / (p.m_parede_oeste_motor * p.cp_parede_oeste_motor);
 
-    % Radiação para o céu
-    Q_leste_rad = p.sigma * p.epsilon * p.A_parede_leste_motor * (Tparede_leste_motor^4 - T_cel^4);
-    Q_oeste_rad = p.sigma * p.epsilon * p.A_parede_oeste_motor * (Tparede_oeste_motor^4 - T_cel^4);
-    Q_sul_rad = p.sigma * p.epsilon * p.A_parede_sul_motor * (Tparede_sul_motor^4 - T_cel^4);
-    Q_teto_rad = p.sigma * p.epsilon * p.A_parede_teto_motor * (Tparede_teto_motor^4 - T_cel^4);
+    Q_solar_sul = p.alpha * p.A_parede_sul_motor * G.sul;
+    dT_parede_sul_motor = (Q_conv_in_sul - Q_conv_out_sul - Q_rad_out_sul + Q_solar_sul) / (p.m_parede_sul_motor * p.cp_parede_sul_motor);
 
-    % ========= EQUAÇÕES DIFERENCIAIS =========
-    % Motor (corrigido - balanço energético preciso)
-    dTmotor = (Q_motor - Q_rad - Q_conv_motor - Q_rad_motor - Q_solo_motor) / (p.m_motor * p.cp_motor);
+    dTgerador = (Q_gen_gerador - Q_conv_gerador_ar) / (p.m_gerador * p.cp_gerador);
+    dTbateria = (Q_gen_bateria - Q_conv_bateria_ar) / (p.m_bateria * p.cp_bateria);
 
-    % Ar no espaço do motor
-    dTar_motor = (Q_rad + Q_conv_motor + Q_rad_motor + Q_ar_motor - ...
-                 Q_conv_ar_parede - Q_leste_conv - Q_oeste_conv - Q_sul_conv - Q_teto_conv) / ...
-                 (p.m_ar * p.cp_ar);
-
-    % Ar no reservatório
-    dTar_res = (Q_cond_larocha + Q_conv_res_parede - Q_solo_res) / (p.m_ar_res * p.cp_ar_res);
-
-    % Sensores (1ª ordem)
     dTsensor_motor = (Tmotor - Tsensor_motor) / p.tau_sensor_motor;
     dTsensor_res = (Tar_res - Tsensor_res) / p.tau_sensor_res;
 
-    % Gerador (considerando 5% do calor total)
-    dTgerador = (0.05 * Q_comb - h_gerador * p.A_gerador * (Tgerador - Tar_motor)) / ...
-                (p.m_gerador * p.cp_gerador);
-
-    % Bateria (considerando 1% do calor total)
-    dTbateria = (0.01 * Q_comb - h_bateria * p.A_bateria * (Tbateria - Tar_motor)) / ...
-                (p.m_bateria * p.cp_bateria);
-
-    % Paredes laterais
-    dTleste = (Q_leste_conv - Q_leste_ext - Q_leste_rad) / (p.m_parede_leste_motor * p.cp_parede_leste_motor);
-    dToeste = (Q_oeste_conv - Q_oeste_ext - Q_oeste_rad) / (p.m_parede_oeste_motor * p.cp_parede_oeste_motor);
-    dTsul = (Q_sul_conv - Q_sul_ext - Q_sul_rad) / (p.m_parede_sul_motor * p.cp_parede_sul_motor);
-    dTteto = (Q_teto_conv - Q_teto_ext - Q_teto_rad) / (p.m_parede_teto_motor * p.cp_parede_teto_motor);
-
-    % Parede divisória
-    dT_parede_motor_int = (Q_conv_ar_parede - Q_cond_larocha) / (p.m_parede_motor * p.cp_parede_motor);
-    dT_parede_res_ext = (Q_cond_larocha - Q_conv_res_parede) / (p.m_parede_res * p.cp_parede_res);
-
-    % ========= RETORNO DAS DERIVADAS =========
-    dYdt = [dTmotor; dTar_motor; 0; 0; dTsensor_motor; dTar_res; dTsensor_res; ...
-            dTgerador; dTbateria; dTleste; dToeste; dTsul; dTteto; ...
-            dT_parede_motor_int; dT_parede_res_ext];
-
-    % Verificação de sanidade (evitar overflow numérico)
-    if any(isnan(dYdt)) || any(isinf(dYdt))
-        error('Derivadas inválidas detectadas no tempo t=%.2f', t);
-    end
+    % --- MONTAGEM DO VETOR DE DERIVADAS dYdt ---
+    dYdt = zeros(15, 1);
+    dYdt([1 2 5 6 7 8 9 10 11 12 13 14 15]) = [dTmotor; dT_ar_motor; dTsensor_motor; dT_ar_res; ...
+        dTsensor_res; dTgerador; dTbateria; dT_parede_leste_motor; dT_parede_oeste_motor; ...
+        dT_parede_sul_motor; dT_parede_teto_motor; dT_parede_motor_int; dT_parede_res_ext];
 end
+
