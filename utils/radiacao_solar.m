@@ -1,58 +1,52 @@
-function G = radiacao_solar(t)
-    % --- radiacao_solar.m ---
-    % Calcula a irradiância solar incidente (W/m²) em diferentes superfícies
-    % com base na hora do dia. Modelo simplificado para um dia claro no equador.
-    %
-    % Inputs:
-    %   t - Tempo de simulação em segundos
-    %
-    % Outputs:
-    %   G - Struct com a irradiância para cada superfície (G.teto, G.leste, etc.)
+function G = radiacao_solar(t, p)
+    % --- radiacao_solar.m (Modelo Físico Avançado - Ângulos Solares Rigorosos) ---
+    % Versão final com cálculo explícito dos ângulos de altitude, azimute e
+    % incidência para a máxima precisão física.
 
-    hora_do_dia = mod(t / 3600, 24); % Hora do dia (0-24)
+    hora_do_dia = mod(t / 3600, 24);
 
-    % Define o período do dia com sol (aproximadamente 6h às 18h)
-    nascer_do_sol = 6;
-    por_do_sol = 18;
-    duracao_dia = por_do_sol - nascer_do_sol; % 12 horas
+    nascer_do_sol = 6; por_do_sol = 18; duracao_dia = por_do_sol - nascer_do_sol;
+    G = struct('teto',0,'leste',0,'oeste',0,'sul',0,'norte',0);
 
-    % Inicializa a irradiância como zero (para a noite)
-    G.teto = 0;
-    G.leste = 0;
-    G.oeste = 0;
-    G.sul = 0;
-    G.norte = 0;
+    if hora_do_dia <= nascer_do_sol || hora_do_dia >= por_do_sol, return; end
 
-    % A radiação solar só é calculada durante o período diurno
-    if hora_do_dia > nascer_do_sol && hora_do_dia < por_do_sol
-        % Ângulo que varia de 0 a pi, representando o progresso do dia
-        angulo_solar = pi * (hora_do_dia - nascer_do_sol) / duracao_dia;
+    % --- 1. CÁLCULO DOS ÂNGULOS SOLARES FUNDAMENTAIS ---
+    omega = (pi/duracao_dia) * (hora_do_dia - 12);
+    delta = 0; phi = 0;
 
-        % Irradiância na superfície horizontal (teto)
-        % Modelo senoidal com pico de 950 W/m² ao meio-dia
-        G_max_horiz = 950;
-        G.teto = G_max_horiz * sin(angulo_solar);
+    sin_alpha_s = max(0, sin(phi)*sin(delta) + cos(phi)*cos(delta)*cos(omega));
+    alpha_s = asin(sin_alpha_s);
+    if alpha_s < 1e-6, return; end
 
-        % Irradiância em superfícies verticais (modelo simplificado)
-        G_max_vert = 600; % Pico de irradiância para paredes verticais
+    cos_gamma_s = min(1, max(-1, (sin_alpha_s*sin(phi) - sin(delta)) / (cos(alpha_s)*cos(phi))));
+    gamma_s = acos(cos_gamma_s);
+    if omega > 0, gamma_s = -gamma_s; end
 
-        % Parede Leste: recebe sol pela manhã (6h às 12h)
-        if hora_do_dia < 12
-            angulo_manha = pi * (hora_do_dia - nascer_do_sol) / (duracao_dia / 2);
-            G.leste = G_max_vert * sin(angulo_manha);
-        end
+    % --- 2. MODELO ASHRAE PARA RADIAÇÃO EM CÉU LIMPO ---
+    A = p.rad_A; B = p.rad_B; C = p.rad_C;
+    G_beam_normal = A * exp(-B / sin_alpha_s);
+    G_diffuse_horiz = C * G_beam_normal;
 
-        % Parede Oeste: recebe sol pela tarde (12h às 18h)
-        if hora_do_dia >= 12
-            angulo_tarde = pi * (hora_do_dia - 12) / (duracao_dia / 2);
-            G.oeste = G_max_vert * sin(angulo_tarde);
-        end
+    % --- 3. CÁLCULO DA RADIAÇÃO TOTAL NA HORIZONTAL (TETO) ---
+    G_beam_horiz = G_beam_normal * sin_alpha_s;
+    G_total_horiz = G_beam_horiz + G_diffuse_horiz;
+    G.teto = G_total_horiz;
 
-        % Paredes Norte e Sul: recebem principalmente radiação difusa
-        % Modelado como uma fração da radiação horizontal
-        fator_difuso = 0.2;
-        G.sul = fator_difuso * G.teto;
-        G.norte = fator_difuso * G.teto; % Para o compartimento do reservatório
+    % --- 4. CÁLCULO DA RADIAÇÃO TOTAL NAS PAREDES VERTICAIS ---
+    G_diffuse_sky_vert = 0.5 * G_diffuse_horiz;
+    G_reflected_ground_vert = 0.5 * G_total_horiz * p.albedo_solo;
+
+    function G_beam_wall = get_beam_on_wall(wall_azimuth)
+        cos_theta = cos(alpha_s) * cos(gamma_s - wall_azimuth);
+        if cos_theta > 0, G_beam_wall = G_beam_normal * cos_theta; else, G_beam_wall = 0; end
     end
+
+    azimuth_leste = pi/2; azimuth_oeste = -pi/2; azimuth_sul = 0; azimuth_norte = pi;
+
+    G.leste = get_beam_on_wall(azimuth_leste) + G_diffuse_sky_vert + G_reflected_ground_vert;
+    G.oeste = get_beam_on_wall(azimuth_oeste) + G_diffuse_sky_vert + G_reflected_ground_vert;
+    G.sul   = get_beam_on_wall(azimuth_sul)   + G_diffuse_sky_vert + G_reflected_ground_vert;
+    G.norte = get_beam_on_wall(azimuth_norte) + G_diffuse_sky_vert + G_reflected_ground_vert;
+
 end
 
