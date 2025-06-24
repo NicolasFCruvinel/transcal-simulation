@@ -6,7 +6,7 @@ function p = parametros()
     p.withFanFail = false;
     p.withExhaustorFail = false;
     p.withOnOffControl = false;
-    p.withVariablePower = false;
+    p.withVariablePower = true;
 
     % --- CONSTANTES FÍSICAS E DE SUPERFÍCIE ---
     p.sigma = 5.67e-8; p.k_solo = 1; p.Tinf = 23 + 273.15;

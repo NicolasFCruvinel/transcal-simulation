@@ -1,8 +1,3 @@
-% === main_simulacao.m (Versão Final Corrigida) ===
-% Script principal que executa a simulação, gera gráficos organizados
-% por compartimento, com grelha fina, e os salva automaticamente como PNG
-% em alta resolução.
-
 clear; clc; close all;
 addpath('utils');
 
@@ -63,6 +58,18 @@ if ~exist('img', 'dir')
    mkdir('img');
 end
 
+% --- Define o prefixo do nome do ficheiro com base na questão ---
+filename_prefix = 'Q2_PotenciaFixa_'; % Padrão para a Questão 2
+if p.withOnOffControl
+    filename_prefix = 'Q4_ControleOnOff_';
+elseif p.withVariablePower
+    filename_prefix = 'Q5_PotenciaVariavel_';
+elseif p.withFanFail
+    filename_prefix = 'Q3_FalhaVentoinha_';
+elseif p.withExhaustorFail
+     filename_prefix = 'Q3d_FalhaExaustor_';
+end
+
 % Função auxiliar para configurar a grelha
 function configure_grid(x_step, y_step, t0_sec, tf_sec)
     ax = gca;
@@ -88,9 +95,8 @@ xlabel('Hora do Dia [h]'); ylabel('Irradiância [W/m²]');
 legend('Teto', 'Parede Leste', 'Parede Oeste', 'Parede Sul', 'Location', 'north');
 xlim([t0/3600, tf/3600]);
 configure_grid(1, 100, t0, tf);
-set(fig1, 'PaperUnits', 'inches');
-set(fig1, 'PaperPosition', [0 0 16 9]);
-print(fig1, 'img/1_irradiancia_solar.png', '-dpng', '-r300');
+set(fig1, 'PaperUnits', 'inches'); set(fig1, 'PaperPosition', [0 0 16 9]);
+print(fig1, ['img/' filename_prefix '1_irradiancia_solar.png'], '-dpng', '-r300');
 
 % Figura 2: Temperaturas das Paredes (Lado do Motor)
 fig2 = figure('Name', 'Temperaturas das Paredes - Lado Motor', 'NumberTitle', 'off');
@@ -104,9 +110,8 @@ xlabel('Hora do Dia [h]'); ylabel('Temperatura [°C]');
 legend('Teto', 'Parede Leste', 'Parede Oeste', 'Parede Sul', 'Ambiente', 'Location', 'northwest');
 xlim([t0/3600, tf/3600]);
 configure_grid(1, 5, t0, tf);
-set(fig2, 'PaperUnits', 'inches');
-set(fig2, 'PaperPosition', [0 0 16 9]);
-print(fig2, 'img/2_paredes_motor.png', '-dpng', '-r300');
+set(fig2, 'PaperUnits', 'inches'); set(fig2, 'PaperPosition', [0 0 16 9]);
+print(fig2, ['img/' filename_prefix '2_paredes_motor.png'], '-dpng', '-r300');
 
 % Figura 3: Temperaturas das Paredes (Lado do Reservatório)
 fig3 = figure('Name', 'Temperaturas das Paredes - Lado Reservatório', 'NumberTitle', 'off');
@@ -120,9 +125,8 @@ xlabel('Hora do Dia [h]'); ylabel('Temperatura [°C]');
 legend('Parede Norte', 'Parede Leste', 'Parede Oeste', 'Teto', 'Ambiente', 'Location', 'northwest');
 xlim([t0/3600, tf/3600]);
 configure_grid(1, 5, t0, tf);
-set(fig3, 'PaperUnits', 'inches');
-set(fig3, 'PaperPosition', [0 0 16 9]);
-print(fig3, 'img/3_paredes_reservatorio.png', '-dpng', '-r300');
+set(fig3, 'PaperUnits', 'inches'); set(fig3, 'PaperPosition', [0 0 16 9]);
+print(fig3, ['img/' filename_prefix '3_paredes_reservatorio.png'], '-dpng', '-r300');
 
 % Figura 4: Temperaturas Internas (Lado do Motor)
 fig4 = figure('Name', 'Temperaturas Internas - Lado Motor', 'NumberTitle', 'off');
@@ -135,9 +139,8 @@ xlabel('Hora do Dia [h]'); ylabel('Temperatura [°C]');
 legend('Motor', 'Ar do Motor', 'Parede Divisória (Lado Motor)', 'Ambiente', 'Location', 'northwest');
 xlim([t0/3600, tf/3600]);
 configure_grid(1, 10, t0, tf);
-set(fig4, 'PaperUnits', 'inches');
-set(fig4, 'PaperPosition', [0 0 16 9]);
-print(fig4, 'img/4_internas_motor.png', '-dpng', '-r300');
+set(fig4, 'PaperUnits', 'inches'); set(fig4, 'PaperPosition', [0 0 16 9]);
+print(fig4, ['img/' filename_prefix '4_internas_motor.png'], '-dpng', '-r300');
 
 % Figura 5: Temperaturas Internas (Lado do Reservatório)
 fig5 = figure('Name', 'Temperaturas Internas - Lado Reservatório', 'NumberTitle', 'off');
@@ -150,14 +153,29 @@ xlabel('Hora do Dia [h]'); ylabel('Temperatura [°C]');
 legend('Reservatório Diesel', 'Ar do Reservatório', 'Parede Divisória (Lado Res.)', 'Ambiente', 'Location', 'northwest');
 xlim([t0/3600, tf/3600]);
 configure_grid(1, 2, t0, tf);
-set(fig5, 'PaperUnits', 'inches');
-set(fig5, 'PaperPosition', [0 0 16 9]);
-print(fig5, 'img/5_internas_reservatorio.png', '-dpng', '-r300');
+set(fig5, 'PaperUnits', 'inches'); set(fig5, 'PaperPosition', [0 0 16 9]);
+print(fig5, ['img/' filename_prefix '5_internas_reservatorio.png'], '-dpng', '-r300');
+
+% Figura 6: Visão Geral das Temperaturas Internas
+fig6 = figure('Name', 'Visão Geral das Temperaturas Internas', 'NumberTitle', 'off');
+plot(horas, T_motor_C, 'r', 'LineWidth', 2); hold on;
+plot(horas, T_ar_motor_C, 'b--', 'LineWidth', 1.5);
+plot(horas, T_parede_motor_int_C, 'Color', [0.4660 0.6740 0.1880], 'LineStyle', '-.', 'LineWidth', 1.5);
+plot(horas, T_reservatorio_C, 'g', 'LineWidth', 2);
+plot(horas, T_ar_res_C, 'm--', 'LineWidth', 1.5);
+plot(horas, T_parede_res_ext_C, 'Color', [0.9290 0.6940 0.1250], 'LineStyle', '-.', 'LineWidth', 1.5);
+plot(horas, T_amb_C, 'k:', 'LineWidth', 1.5); hold off;
+title('Visão Geral de Todas as Temperaturas Internas');
+xlabel('Hora do Dia [h]'); ylabel('Temperatura [°C]');
+legend('Motor', 'Ar (Motor)', 'Parede Div. (Lado Motor)', 'Reservatório', 'Ar (Reservatório)', 'Parede Div. (Lado Res.)', 'Ambiente', 'Location', 'northwest');
+xlim([t0/3600, tf/3600]);
+configure_grid(1, 10, t0, tf);
+set(fig6, 'PaperUnits', 'inches'); set(fig6, 'PaperPosition', [0 0 16 9]);
+print(fig6, ['img/' filename_prefix '6_internas_geral.png'], '-dpng', '-r300');
 
 %% ANÁLISE ESPECÍFICA POR QUESTÃO
-fprintf('\n\n========= ANÁLISE ESPECÍFICA DA SIMULAÇÃO =========\n');
+fprintf('\n\n========= ANÁLISE ESPECÍFICA DA SIMULAÇÃO: %s =========\n', strrep(filename_prefix(1:end-1), '_', ' '));
 if p.withOnOffControl
-    fprintf('MODO ATIVO: Questão 4 - Controle On-Off\n');
     T_on = 100; T_off = 80;
     rad_state = zeros(size(t)); current_state = false;
     for i=1:length(t)
@@ -180,7 +198,6 @@ if p.withOnOffControl
         fprintf(' -> Não foram detectados ciclos suficientes para a análise (detectados %d).\n', length(on_events_idx));
     end
 elseif p.withVariablePower
-    fprintf('MODO ATIVO: Questão 5 - Potência Variável\n');
     [max_T_motor, ~] = max(T_motor_C); [max_T_ar_motor, ~] = max(T_ar_motor_C);
     fprintf(' -> 5b) Temperatura Máxima do Motor: %.2f °C\n', max_T_motor);
     fprintf(' -> 5b) Temperatura Máxima do Ar (Motor): %.2f °C\n', max_T_ar_motor);
@@ -195,15 +212,12 @@ elseif p.withVariablePower
     fprintf(' -> 5c) Consumo de Combustível Total: %.2f Litros\n', volume_L);
     fprintf(' -> 5c) Energia Elétrica Gerada: %.2f kWh\n', Energia_eletrica_kWh);
 elseif p.withFanFail
-    fprintf('MODO ATIVO: Questão 3 - Falha da Ventoinha\n');
     [max_T_motor, ~] = max(T_motor_C);
     fprintf(' -> 3b) Temperatura Máxima do Motor (com falha da ventoinha): %.2f °C\n', max_T_motor);
 elseif p.withExhaustorFail
-     fprintf('MODO ATIVO: Questão 3d - Falha do Exaustor\n');
      [max_T_ar_res, ~] = max(T_ar_res_C);
      fprintf(' -> 3d) Temperatura Máxima do Ar no Reservatório: %.2f °C\n', max_T_ar_res);
 else
-    fprintf('MODO ATIVO: Questão 2 - Potência Fixa (Cenário Base)\n');
     idx_18h = find(t >= 18*3600, 1, 'first');
     fprintf(' -> 2d) Temperatura do Motor às 18h: %.2f °C\n', T_motor_C(idx_18h));
     fprintf(' -> 2d) Temperatura do Ar (Motor) às 18h: %.2f °C\n', T_ar_motor_C(idx_18h));
