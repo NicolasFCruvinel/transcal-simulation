@@ -1,17 +1,18 @@
 function G = radiacao_solar(t, p)
-    % --- radiacao_solar.m (Modelo Físico Avançado - Ângulos Solares Rigorosos) ---
-    % Versão final com cálculo explícito dos ângulos de altitude, azimute e
-    % incidência para a máxima precisão física.
-
     hora_do_dia = mod(t / 3600, 24);
 
-    nascer_do_sol = 6; por_do_sol = 18; duracao_dia = por_do_sol - nascer_do_sol;
+    duracao_dia = 12; % Duração do dia solar de 12 horas
+    nascer_do_sol = p.solar_noon_hour - duracao_dia / 2; % Nascer do sol relativo
+    por_do_sol = p.solar_noon_hour + duracao_dia / 2;   % Pôr do sol relativo
+
     G = struct('teto',0,'leste',0,'oeste',0,'sul',0,'norte',0);
 
     if hora_do_dia <= nascer_do_sol || hora_do_dia >= por_do_sol, return; end
 
     % --- 1. CÁLCULO DOS ÂNGULOS SOLARES FUNDAMENTAIS ---
-    omega = (pi/duracao_dia) * (hora_do_dia - 12);
+    % O ângulo horário (omega) agora está perfeitamente alinhado com o
+    % período de luz solar definido acima.
+    omega = (pi/duracao_dia) * (hora_do_dia - p.solar_noon_hour);
     delta = 0; phi = 0;
 
     sin_alpha_s = max(0, sin(phi)*sin(delta) + cos(phi)*cos(delta)*cos(omega));

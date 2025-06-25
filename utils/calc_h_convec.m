@@ -22,7 +22,6 @@ function h = calc_h_convec(D, vel, DeltaT_surface_air)
         Nu = 0.3 + (0.62 * Re^0.5 * Pr^(1/3)) / (1 + (0.4/Pr)^(2/3))^0.25 * ...
              (1 + (Re/282000)^(5/8))^(4/5);
     else % Convecção Natural
-        % CORREÇÃO: Usa o DeltaT real passado como argumento.
         % Garante que DeltaT seja pelo menos um valor pequeno e positivo.
         DeltaT = max(1e-6, abs(DeltaT_surface_air));
 
