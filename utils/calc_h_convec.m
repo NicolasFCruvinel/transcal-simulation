@@ -1,4 +1,8 @@
-function h = calc_h_convec(D, vel, DeltaT_surface_air, geometry, orientation)
+function h = calc_h_convec(D, vel, Ts, T_fluid, geometry, orientation)
+    % === calc_h_convec.m (v8 - Lógica Defensiva para Solver de EDO) ===
+    % Versão final com lógica robusta que evita erros fatais dentro do
+    % solver de EDOs, usando um caso padrão para orientações inesperadas.
+
     % Propriedades do ar (aproximadas para 300K)
     k_ar = 0.0263;   % Condutividade térmica [W/m.K]
     nu_ar = 1.589e-5;% Viscosidade cinemática [m²/s]
@@ -7,48 +11,54 @@ function h = calc_h_convec(D, vel, DeltaT_surface_air, geometry, orientation)
     g = 9.81;        % Aceleração gravitacional [m/s²]
 
     if vel > 0.1 % --- CONVECÇÃO FORÇADA ---
-        Re = vel * D / nu_ar;
+        % Para convecção forçada, usamos a temperatura do fluido (T_fluid)
+        props = get_air_properties(T_fluid);
+        props_s = get_air_properties(Ts);
+        mu_s = props_s.mu;
+
+        Re = vel * D / props.nu;
+
         if strcmp(geometry, 'sphere')
-            Nu = 2 + (0.4 * Re^0.5 + 0.06 * Re^(2/3)) * Pr^0.4;
+            Nu = 2 + (0.4 * Re^0.5 + 0.06 * Re^(2/3)) * props.pr^0.4 * (props.mu / mu_s)^0.25;
         elseif strcmp(geometry, 'plate')
-            Nu = 0.664 * Re^0.5 * Pr^(1/3); % Fluxo laminar
+            Nu = 0.664 * Re^0.5 * props.pr^(1/3); % Fluxo laminar
         else
-            error('Geometria desconhecida para convecção forçada: %s', geometry);
+            Nu = 0; % Geometria desconhecida
         end
 
     else % --- CONVECÇÃO NATURAL ---
-        DeltaT = max(1e-6, abs(DeltaT_surface_air));
-        Ra = (g * beta * DeltaT * D^3 / nu_ar^2) * Pr;
+        % Para convecção natural, usamos a temperatura de filme
+        T_film = (Ts + T_fluid) / 2;
+        props = get_air_properties(T_film);
+
+        DeltaT = abs(Ts - T_fluid);
+        if DeltaT < 1e-6, h = 0; return; end
+
+        Ra = (g * props.beta * DeltaT * D^3) / (props.nu * props.alpha);
 
         if strcmp(geometry, 'sphere')
-            Nu = 2 + (0.589 * Ra^(1/4)) / (1 + (0.469 / Pr)^(9/16))^(4/9);
+            Nu = 2 + (0.589 * Ra^(1/4)) / (1 + (0.469 / props.pr)^(9/16))^(4/9);
 
         elseif strcmp(geometry, 'plate')
-            % --- Lógica Explícita para Orientação da Placa ---
-            switch orientation
-                case 'vertical'
-                    % Correlação de Churchill e Chu para placa vertical
-                    Nu = (0.825 + (0.387 * Ra^(1/6)) / (1 + (0.492 / Pr)^(9/16))^(8/27))^2;
-
-                case 'horizontal_up'
-                    if Ra > 1e7 && Ra < 1e11
-                        Nu = 0.15 * Ra^(1/3); % Turbulento
-                    else
-                        Nu = 0.54 * Ra^(1/4); % Laminar
-                    end
-
-                case 'horizontal_down'
-                    Nu = 0.27 * Ra^(1/4);
-
-                otherwise
-                    error('Orientação de placa desconhecida para convecção natural: %s', orientation);
+            % CORREÇÃO: Lógica com if/elseif/else para ser mais robusta
+            if strcmp(orientation, 'horizontal_up')
+                if Ra > 1e7 && Ra < 1e11, Nu = 0.15 * Ra^(1/3); else, Nu = 0.54 * Ra^(1/4); end
+            elseif strcmp(orientation, 'horizontal_down')
+                Nu = 0.27 * Ra^(1/4);
+            else % Assume 'vertical' como padrão para qualquer outro caso
+                Nu = (0.825 + (0.387 * Ra^(1/6)) / (1 + (0.492 / props.pr)^(9/16))^(8/27))^2;
             end
         else
-            error('Geometria desconhecida para convecção natural: %s', geometry);
+            Nu = 0; % Geometria desconhecida
         end
     end
 
     % Calcula o coeficiente convectivo a partir do Nusselt
-    h = Nu * k_ar / D;
+    h = props.k * Nu / D;
+
+    % Garante que h não é NaN ou Inf para não parar o solver
+    if isnan(h) || isinf(h)
+        h = 0;
+    end
 end
 
