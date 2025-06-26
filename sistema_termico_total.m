@@ -18,43 +18,51 @@ function dYdt = sistema_termico_total(t, Y, p, Tinit_K)
     m_dot_ar_res_atual = p.m_dot_ar_res; if p.withExhaustorFail, m_dot_ar_res_atual = 2e-3; end
 
     % --- CÁLCULO DAS TROCAS DE CALOR ---
-    h_int = calc_h_convec(p.D_motor, 3, 0);
+    % Convecção Interna (Forçada, v=3m/s)
+    h_motor = calc_h_convec(p.D_motor, 3, 0, 'sphere', '');
+    h_gerador = calc_h_convec(p.D_gerador, 3, 0, 'sphere', '');
+    h_bateria = calc_h_convec(p.D_bateria, 3, 0, 'sphere', '');
+    h_int_placa = calc_h_convec(2.5, 3, 0, 'plate', '');
 
-    % Lado Motor
-    Q_radiador=UA_rad*(Tmotor-Tar_motor); Q_conv_motor_ar=h_int*p.A_motor*(Tmotor-Tar_motor); Q_vent_motor=p.m_dot_ar*p.cp_ar*(Tamb-Tar_motor);
+    % Convecção Externa (Natural, v=0)
+    L_parede_vert = 2.5;
+    L_teto_mot = p.A_parede_teto_motor / (2 * (2.5 + 2.5));
+    L_teto_res = p.A_parede_teto_res / (2 * (2.5 + 3.4));
+
+    h_ext_teto_mot = calc_h_convec(L_teto_mot, 0, Tparede_teto_motor - Tamb, 'plate', 'horizontal_up');
+    h_ext_leste_mot = calc_h_convec(L_parede_vert, 0, Tparede_leste_motor - Tamb, 'plate', 'vertical');
+    h_ext_oeste_mot = calc_h_convec(L_parede_vert, 0, Tparede_oeste_motor - Tamb, 'plate', 'vertical');
+    h_ext_sul_mot = calc_h_convec(L_parede_vert, 0, Tparede_sul_motor - Tamb, 'plate', 'vertical');
+    h_ext_norte_res = calc_h_convec(L_parede_vert, 0, Tparede_norte_res - Tamb, 'plate', 'vertical');
+    h_ext_leste_res = calc_h_convec(L_parede_vert, 0, Tparede_leste_res - Tamb, 'plate', 'vertical');
+    h_ext_oeste_res = calc_h_convec(L_parede_vert, 0, Tparede_oeste_res - Tamb, 'plate', 'vertical');
+    h_ext_teto_res = calc_h_convec(L_teto_res, 0, Tparede_teto_res - Tamb, 'plate', 'horizontal_up');
+
+    % Balanços de Calor (Resto do código permanece igual)
+    Q_radiador=UA_rad*(Tmotor-Tar_motor); Q_conv_motor_ar=h_motor*p.A_motor*(Tmotor-Tar_motor); Q_conv_gerador_ar=h_gerador*p.A_gerador*(Tgerador-Tar_motor); Q_conv_bateria_ar=h_bateria*p.A_bateria*(Tbateria-Tar_motor);
+    Q_vent_motor=p.m_dot_ar*p.cp_ar*(Tamb-Tar_motor);
     A_total_int=p.A_parede_leste_motor+p.A_parede_oeste_motor+p.A_parede_sul_motor+p.A_parede_teto_motor+p.A_parede_motor;
     T_sup_media_K4=(p.A_parede_leste_motor*Tparede_leste_motor^4+p.A_parede_oeste_motor*Tparede_oeste_motor^4+p.A_parede_sul_motor*Tparede_sul_motor^4+p.A_parede_teto_motor*Tparede_teto_motor^4+p.A_parede_motor*Tparede_motor_int^4)/A_total_int;
     Q_rad_total_motor=p.sigma*p.epsilon*p.A_motor*(Tmotor^4-T_sup_media_K4);
     Q_rad_para_leste_mot=Q_rad_total_motor*(p.A_parede_leste_motor/A_total_int); Q_rad_para_oeste_mot=Q_rad_total_motor*(p.A_parede_oeste_motor/A_total_int);
     Q_rad_para_sul_mot=Q_rad_total_motor*(p.A_parede_sul_motor/A_total_int); Q_rad_para_teto_mot=Q_rad_total_motor*(p.A_parede_teto_motor/A_total_int);
     Q_rad_para_divisoria=Q_rad_total_motor*(p.A_parede_motor/A_total_int);
-
-    % Lado Reservatório
     Q_cond_div = (p.A_div/(p.esp_larocha/p.k_larocha))*(Tparede_motor_int-Tparede_res_ext);
-    Q_conv_res_ar = h_int*p.A_res*(Treservatorio-Tar_res);
+    Q_conv_res_ar = h_int_placa*p.A_res*(Treservatorio-Tar_res);
     Q_saida_combustivel = m_dot_combustivel*p.cp_res*(Treservatorio-Tinit_K);
     Q_vent_res = m_dot_ar_res_atual*p.cp_ar_res*(Tamb-Tar_res);
-    Q_conv_parede_div_res_ar = h_int*p.A_parede_res*(Tparede_res_ext-Tar_res);
-
-    % Paredes Externas (Lado Motor)
-    h_ext = calc_h_convec(2.5,0,Tparede_teto_motor-Tamb); Q_conv_in_teto=h_int*p.A_parede_teto_motor*(Tar_motor-Tparede_teto_motor); Q_conv_out_teto=h_ext*p.A_parede_teto_motor*(Tparede_teto_motor-Tamb); Q_rad_out_teto=p.sigma*p.epsilon*p.A_parede_teto_motor*(Tparede_teto_motor^4-Tceu^4); Q_solar_teto=p.alpha*p.A_parede_teto_motor*G.teto;
-    h_ext = calc_h_convec(2.5,0,Tparede_leste_motor-Tamb); Q_conv_in_leste=h_int*p.A_parede_leste_motor*(Tar_motor-Tparede_leste_motor); Q_conv_out_leste=h_ext*p.A_parede_leste_motor*(Tparede_leste_motor-Tamb); Q_rad_out_leste=p.sigma*p.epsilon*p.A_parede_leste_motor*(Tparede_leste_motor^4-Tceu^4); Q_solar_leste=p.alpha*p.A_parede_leste_motor*G.leste;
-    h_ext = calc_h_convec(2.5,0,Tparede_oeste_motor-Tamb); Q_conv_in_oeste=h_int*p.A_parede_oeste_motor*(Tar_motor-Tparede_oeste_motor); Q_conv_out_oeste=h_ext*p.A_parede_oeste_motor*(Tparede_oeste_motor-Tamb); Q_rad_out_oeste=p.sigma*p.epsilon*p.A_parede_oeste_motor*(Tparede_oeste_motor^4-Tceu^4); Q_solar_oeste=p.alpha*p.A_parede_oeste_motor*G.oeste;
-    h_ext = calc_h_convec(2.5,0,Tparede_sul_motor-Tamb); Q_conv_in_sul=h_int*p.A_parede_sul_motor*(Tar_motor-Tparede_sul_motor); Q_conv_out_sul=h_ext*p.A_parede_sul_motor*(Tparede_sul_motor-Tamb); Q_rad_out_sul=p.sigma*p.epsilon*p.A_parede_sul_motor*(Tparede_sul_motor^4-Tceu^4); Q_solar_sul=p.alpha*p.A_parede_sul_motor*G.sul;
-
-    % Paredes Externas (Lado Reservatório)
-    h_ext = calc_h_convec(2.5,0,Tparede_norte_res-Tamb); Q_conv_in_norte_res=h_int*p.A_parede_norte_res*(Tar_res-Tparede_norte_res); Q_conv_out_norte_res=h_ext*p.A_parede_norte_res*(Tparede_norte_res-Tamb); Q_rad_out_norte_res=p.sigma*p.epsilon*p.A_parede_norte_res*(Tparede_norte_res^4-Tceu^4); Q_solar_norte_res=p.alpha*p.A_parede_norte_res*G.norte;
-    h_ext = calc_h_convec(2.5,0,Tparede_leste_res-Tamb); Q_conv_in_leste_res=h_int*p.A_parede_leste_res*(Tar_res-Tparede_leste_res); Q_conv_out_leste_res=h_ext*p.A_parede_leste_res*(Tparede_leste_res-Tamb); Q_rad_out_leste_res=p.sigma*p.epsilon*p.A_parede_leste_res*(Tparede_leste_res^4-Tceu^4); Q_solar_leste_res=p.alpha*p.A_parede_leste_res*G.leste;
-    h_ext = calc_h_convec(2.5,0,Tparede_oeste_res-Tamb); Q_conv_in_oeste_res=h_int*p.A_parede_oeste_res*(Tar_res-Tparede_oeste_res); Q_conv_out_oeste_res=h_ext*p.A_parede_oeste_res*(Tparede_oeste_res-Tamb); Q_rad_out_oeste_res=p.sigma*p.epsilon*p.A_parede_oeste_res*(Tparede_oeste_res^4-Tceu^4); Q_solar_oeste_res=p.alpha*p.A_parede_oeste_res*G.oeste;
-    h_ext = calc_h_convec(2.5,0,Tparede_teto_res-Tamb); Q_conv_in_teto_res=h_int*p.A_parede_teto_res*(Tar_res-Tparede_teto_res); Q_conv_out_teto_res=h_ext*p.A_parede_teto_res*(Tparede_teto_res-Tamb); Q_rad_out_teto_res=p.sigma*p.epsilon*p.A_parede_teto_res*(Tparede_teto_res^4-Tceu^4); Q_solar_teto_res=p.alpha*p.A_parede_teto_res*G.teto;
-
-    % Perdas para o solo
-    R_conv_chao_mot=1/(h_int*p.A_base_motor); R_cond_chao_mot=1/(p.S_motor*p.k_solo); Q_chao_motor=(Tar_motor-p.Tinf)/(R_conv_chao_mot+R_cond_chao_mot);
-    R_conv_chao_res=1/(h_int*p.A_base_res); R_cond_chao_res=1/(p.S_res*p.k_solo); Q_chao_res=(Tar_res-p.Tinf)/(R_conv_chao_res+R_cond_chao_res);
-
-    % Outros
-    Q_conv_gerador_ar=h_int*p.A_gerador*(Tgerador-Tar_motor); Q_conv_bateria_ar=h_int*p.A_bateria*(Tbateria-Tar_motor);
-    Q_conv_ar_parede_div_motor=h_int*p.A_parede_motor*(Tar_motor-Tparede_motor_int);
+    Q_conv_parede_div_res_ar = h_int_placa*p.A_parede_res*(Tparede_res_ext-Tar_res);
+    Q_conv_in_teto = h_int_placa*p.A_parede_teto_motor*(Tar_motor-Tparede_teto_motor); Q_conv_out_teto=h_ext_teto_mot*p.A_parede_teto_motor*(Tparede_teto_motor-Tamb); Q_rad_out_teto=p.sigma*p.epsilon*p.A_parede_teto_motor*(Tparede_teto_motor^4-Tceu^4); Q_solar_teto=p.alpha*p.A_parede_teto_motor*G.teto;
+    Q_conv_in_leste=h_int_placa*p.A_parede_leste_motor*(Tar_motor-Tparede_leste_motor); Q_conv_out_leste=h_ext_leste_mot*p.A_parede_leste_motor*(Tparede_leste_motor-Tamb); Q_rad_out_leste=p.sigma*p.epsilon*p.A_parede_leste_motor*(Tparede_leste_motor^4-Tceu^4); Q_solar_leste=p.alpha*p.A_parede_leste_motor*G.leste;
+    Q_conv_in_oeste=h_int_placa*p.A_parede_oeste_motor*(Tar_motor-Tparede_oeste_motor); Q_conv_out_oeste=h_ext_oeste_mot*p.A_parede_oeste_motor*(Tparede_oeste_motor-Tamb); Q_rad_out_oeste=p.sigma*p.epsilon*p.A_parede_oeste_motor*(Tparede_oeste_motor^4-Tceu^4); Q_solar_oeste=p.alpha*p.A_parede_oeste_motor*G.oeste;
+    Q_conv_in_sul=h_int_placa*p.A_parede_sul_motor*(Tar_motor-Tparede_sul_motor); Q_conv_out_sul=h_ext_sul_mot*p.A_parede_sul_motor*(Tparede_sul_motor-Tamb); Q_rad_out_sul=p.sigma*p.epsilon*p.A_parede_sul_motor*(Tparede_sul_motor^4-Tceu^4); Q_solar_sul=p.alpha*p.A_parede_sul_motor*G.sul;
+    Q_conv_in_norte_res=h_int_placa*p.A_parede_norte_res*(Tar_res-Tparede_norte_res); Q_conv_out_norte_res=h_ext_norte_res*p.A_parede_norte_res*(Tparede_norte_res-Tamb); Q_rad_out_norte_res=p.sigma*p.epsilon*p.A_parede_norte_res*(Tparede_norte_res^4-Tceu^4); Q_solar_norte_res=p.alpha*p.A_parede_norte_res*G.norte;
+    Q_conv_in_leste_res=h_int_placa*p.A_parede_leste_res*(Tar_res-Tparede_leste_res); Q_conv_out_leste_res=h_ext_leste_res*p.A_parede_leste_res*(Tparede_leste_res-Tamb); Q_rad_out_leste_res=p.sigma*p.epsilon*p.A_parede_leste_res*(Tparede_leste_res^4-Tceu^4); Q_solar_leste_res=p.alpha*p.A_parede_leste_res*G.leste;
+    Q_conv_in_oeste_res=h_int_placa*p.A_parede_oeste_res*(Tar_res-Tparede_oeste_res); Q_conv_out_oeste_res=h_ext_oeste_res*p.A_parede_oeste_res*(Tparede_oeste_res-Tamb); Q_rad_out_oeste_res=p.sigma*p.epsilon*p.A_parede_oeste_res*(Tparede_oeste_res^4-Tceu^4); Q_solar_oeste_res=p.alpha*p.A_parede_oeste_res*G.oeste;
+    Q_conv_in_teto_res=h_int_placa*p.A_parede_teto_res*(Tar_res-Tparede_teto_res); Q_conv_out_teto_res=h_ext_teto_res*p.A_parede_teto_res*(Tparede_teto_res-Tamb); Q_rad_out_teto_res=p.sigma*p.epsilon*p.A_parede_teto_res*(Tparede_teto_res^4-Tceu^4); Q_solar_teto_res=p.alpha*p.A_parede_teto_res*G.teto;
+    R_conv_chao_mot=1/(h_int_placa*p.A_base_motor); R_cond_chao_mot=1/(p.S_motor*p.k_solo); Q_chao_motor=(Tar_motor-p.Tinf)/(R_conv_chao_mot+R_cond_chao_mot);
+    R_conv_chao_res=1/(h_int_placa*p.A_base_res); R_cond_chao_res=1/(p.S_res*p.k_solo); Q_chao_res=(Tar_res-p.Tinf)/(R_conv_chao_res+R_cond_chao_res);
+    Q_conv_ar_parede_div_motor=h_int_placa*p.A_parede_motor*(Tar_motor-Tparede_motor_int);
 
     % --- EQUAÇÕES DIFERENCIAIS ---
     dm_res_dt = -m_dot_combustivel;

@@ -1,37 +1,51 @@
-function h = calc_h_convec(D, vel, DeltaT_surface_air)
-    % === calc_h_convec.m (Versão com DeltaT Dinâmico) ===
-    % Calcula o coeficiente de transferência de calor convectivo.
-    % Inputs:
-    %   D                - Diâmetro característico [m]
-    %   vel              - Velocidade do fluido [m/s]
-    %   DeltaT_surface_air - Diferença de temperatura Superfície-Ar [K]
-    %                        (usado apenas para convecção natural).
-    % Output:
-    %   h - Coeficiente convectivo [W/m².K]
-
+function h = calc_h_convec(D, vel, DeltaT_surface_air, geometry, orientation)
     % Propriedades do ar (aproximadas para 300K)
-    k_ar = 0.0263;   % Condutividade térmica do ar [W/m.K]
-    nu_ar = 1.589e-5;% Viscosidade cinemática do ar [m²/s]
+    k_ar = 0.0263;   % Condutividade térmica [W/m.K]
+    nu_ar = 1.589e-5;% Viscosidade cinemática [m²/s]
     Pr = 0.707;      % Número de Prandtl
     beta = 1/300;    % Coeficiente de expansão térmica [1/K]
     g = 9.81;        % Aceleração gravitacional [m/s²]
 
-    if vel > 0.1 % Convecção Forçada
+    if vel > 0.1 % --- CONVECÇÃO FORÇADA ---
         Re = vel * D / nu_ar;
-        % Correlação de Churchill e Bernstein para cilindro em fluxo cruzado
-        Nu = 0.3 + (0.62 * Re^0.5 * Pr^(1/3)) / (1 + (0.4/Pr)^(2/3))^0.25 * ...
-             (1 + (Re/282000)^(5/8))^(4/5);
-    else % Convecção Natural
-        % Garante que DeltaT seja pelo menos um valor pequeno e positivo.
+        if strcmp(geometry, 'sphere')
+            Nu = 2 + (0.4 * Re^0.5 + 0.06 * Re^(2/3)) * Pr^0.4;
+        elseif strcmp(geometry, 'plate')
+            Nu = 0.664 * Re^0.5 * Pr^(1/3); % Fluxo laminar
+        else
+            error('Geometria desconhecida para convecção forçada: %s', geometry);
+        end
+
+    else % --- CONVECÇÃO NATURAL ---
         DeltaT = max(1e-6, abs(DeltaT_surface_air));
+        Ra = (g * beta * DeltaT * D^3 / nu_ar^2) * Pr;
 
-        % Número de Grashof
-        Gr = g * beta * DeltaT * D^3 / nu_ar^2;
-        % Número de Rayleigh
-        Ra = Gr * Pr;
+        if strcmp(geometry, 'sphere')
+            Nu = 2 + (0.589 * Ra^(1/4)) / (1 + (0.469 / Pr)^(9/16))^(4/9);
 
-        % Correlação de Churchill e Chu para placa vertical/cilindro
-        Nu = (0.6 + (0.387 * Ra^(1/6)) / (1 + (0.559/Pr)^(9/16))^(8/27))^2;
+        elseif strcmp(geometry, 'plate')
+            % --- Lógica Explícita para Orientação da Placa ---
+            switch orientation
+                case 'vertical'
+                    % Correlação de Churchill e Chu para placa vertical
+                    Nu = (0.825 + (0.387 * Ra^(1/6)) / (1 + (0.492 / Pr)^(9/16))^(8/27))^2;
+
+                case 'horizontal_up'
+                    if Ra > 1e7 && Ra < 1e11
+                        Nu = 0.15 * Ra^(1/3); % Turbulento
+                    else
+                        Nu = 0.54 * Ra^(1/4); % Laminar
+                    end
+
+                case 'horizontal_down'
+                    Nu = 0.27 * Ra^(1/4);
+
+                otherwise
+                    error('Orientação de placa desconhecida para convecção natural: %s', orientation);
+            end
+        else
+            error('Geometria desconhecida para convecção natural: %s', geometry);
+        end
     end
 
     % Calcula o coeficiente convectivo a partir do Nusselt
