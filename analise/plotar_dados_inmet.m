@@ -15,7 +15,7 @@ function [hours_plot, radiation_plot] = process_inmet_data(filename, target_date
         header_lines = 0;
         while header_lines < 10 % Limite para não entrar em loop infinito
             line = fgetl(fid);
-              if ~isempty(strfind(line, 'Data;'))
+            if ~isempty(strfind(line, 'Data;'))
                 break;
             end
             header_lines = header_lines + 1;
