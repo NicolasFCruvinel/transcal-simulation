@@ -1,7 +1,3 @@
-% === main_simulacao.m (Versão Final Completa) ===
-% Script principal que executa a simulação, gera gráficos completos e
-% calcula todos os valores necessários para o relatório final.
-
 clear; clc; close all;
 addpath('utils');
 

@@ -1,8 +1,4 @@
 function dYdt = sistema_termico_total(t, Y, p, Tinit_K)
-    % --- sistema_termico_total_corrigido.m (v7.5 - Chão com Massa e Temperatura) ---
-    % CORREÇÃO: Chão do contentor agora é modelado como um estado térmico
-    % com massa, recebendo calor e perdendo para o solo. Sistema com 21 estados.
-
     % --- Desempacotamento do Vetor de Estados Y (21 estados) ---
     Tmotor = Y(1); Tar_motor = Y(2); Treservatorio = Y(3); m_res_atual = Y(4);
     Tsensor_motor = Y(5); Tar_res = Y(6); Tsensor_res = Y(7); Tgerador = Y(8);
